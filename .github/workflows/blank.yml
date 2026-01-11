@@ -36,6 +36,21 @@ jobs:
       run: |
         pip3 install --upgrade twrpdtgen
         
+    - name: 关键修复：修改 device_info.py 适配 ro.product.bootimage.device
+      run: |
+        # 找到 device_info.py 的安装路径
+        DEVICE_INFO_PATH=$(python3 -c "import sebaubuntu_libs.libandroid.device_info; print(sebaubuntu_libs.libandroid.device_info.__file__)")
+        echo "找到 device_info.py 路径：$DEVICE_INFO_PATH"
+        
+        # 备份原文件
+        cp $DEVICE_INFO_PATH ${DEVICE_INFO_PATH}.bak
+        
+        # 替换 DEVICE_CODENAME 列表，加入 ro.product.bootimage.device
+        sed -i 's/DEVICE_CODENAME = \[/DEVICE_CODENAME = [\n    "ro.product.bootimage.device",/' $DEVICE_INFO_PATH
+        
+        # 验证修改是否生效
+        grep -A 10 "DEVICE_CODENAME" $DEVICE_INFO_PATH || true
+      
     - name: Download recovery image
       run: |
         wget -O recovery.img "${{ github.event.inputs.IMG_URL }}"
@@ -64,5 +79,6 @@ jobs:
           Automatically generated TWRP device tree
           Build run: ${{ github.run_number }}
           Source image: ${{ github.event.inputs.IMG_URL }}
+          适配属性：ro.product.bootimage.device（设备代号：tb8786p1_64_k510_wifi）
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
