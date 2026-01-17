@@ -15,7 +15,7 @@ on:
 jobs:
   generate-device-tree:
     if: github.event.repository.owner.id == github.event.sender.id
-    runs-on: ubuntu-22.04  # 降级到22.04，Python 3.10更兼容twrpdtgen
+    runs-on: ubuntu-22.04
     
     steps:
     - name: Checkout repository
@@ -25,9 +25,9 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y \
-          python3.10 \
-          python3.10-pip \
-          python3.10-venv \
+          python3 \
+          python3-pip \
+          python3-venv \
           cpio \
           wget \
           zip \
@@ -35,43 +35,31 @@ jobs:
           abootimg \
           file
         
-        # 配置Python 3.10为默认
         sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
         sudo update-alternatives --set python3 /usr/bin/python3.10
         
-    - name: Install TWRP generator (指定兼容版本)
+    - name: Install TWRP generator
       run: |
         python3 -m pip install --upgrade pip
-        pip3 install twrpdtgen==2.4.0  # 2.4.0版本兼容性最好
-        pip3 install sebaubuntu_libs==1.0.0  # 锁定依赖版本
+        pip3 install twrpdtgen==2.4.0
+        pip3 install sebaubuntu_libs==1.0.0
         
-    - name: 修复device_info.py（正确添加ro.product.bootimage.device）
+    - name: Fix device_info.py
       run: |
-        # 找到device_info.py的准确路径
         DEVICE_INFO_PATH=$(python3 -c "import sebaubuntu_libs.libandroid.device_info; print(sebaubuntu_libs.libandroid.device_info.__file__)")
-        echo "设备信息文件路径：$DEVICE_INFO_PATH"
-        
-        # 备份原文件
         cp $DEVICE_INFO_PATH ${DEVICE_INFO_PATH}.bak
-        
-        # 正确修改DEVICE_CODENAME列表（完整替换，避免语法错误）
         sed -i '/DEVICE_CODENAME = \[/c\DEVICE_CODENAME = [\n    "ro.product.bootimage.device",\n    "ro.product.device",\n    "ro.build.product",\n    "ro.product.name",\n    "ro.device.model"\]' $DEVICE_INFO_PATH
-        
-        # 验证修改结果
         cat $DEVICE_INFO_PATH | grep -A 10 "DEVICE_CODENAME"
         
     - name: Download recovery/boot image
       run: |
         wget -O recovery.img "${{ github.event.inputs.IMG_URL }}"
-        # 验证镜像格式
         file recovery.img
-        abootimg -i recovery.img || true  # 打印镜像信息
+        abootimg -i recovery.img || true
         
-    - name: 预处理镜像（修复可能的格式问题）
+    - name: Preprocess image
       run: |
-        # 检查是否为bootimg格式，若不是则尝试转换
         if ! abootimg -i recovery.img >/dev/null 2>&1; then
-          echo "镜像格式异常，尝试修复..."
           dd if=recovery.img of=boot_fixed.img skip=1 bs=512
           mv boot_fixed.img recovery.img
         fi
@@ -79,10 +67,9 @@ jobs:
     - name: Generate device tree
       run: |
         mkdir -p device_tree_output
-        # 强制指定设备代号（避免自动识别失败）
         python3 -m twrpdtgen \
           -o device_tree_output \
-          -c tb8786p1_64_k510_wifi \  # 你的设备代号
+          -c tb8786p1_64_k510_wifi \
           recovery.img
         
     - name: Compress device tree
@@ -101,7 +88,7 @@ jobs:
           Automatically generated TWRP device tree
           Build run: ${{ github.run_number }}
           Source image: ${{ github.event.inputs.IMG_URL }}
-          设备代号：tb8786p1_64_k510_wifi
-          镜像格式：$(file recovery.img | cut -d ',' -f1)
+          Device codename: tb8786p1_64_k510_wifi
+          Image format: $(file recovery.img | cut -d ',' -f1)
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
